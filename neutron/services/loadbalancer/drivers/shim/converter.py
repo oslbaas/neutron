@@ -65,17 +65,17 @@ class LBObjectModelConverter(object):
 
     def pool(self, pool):
 
-        res = {'id': pool['id'],
-               'tenant_id': pool['tenant_id'],
-               'name': pool['name'],
-               'description': pool['description'],
-               'subnet_id': pool['subnet_id'],
-               'protocol': pool['protocol'],
-               'vip_id': pool['vip_id'],
-               'lb_method': pool['lb_method'],
-               'admin_state_up': pool['admin_state_up'],
-               'status': pool['status'],
-               'status_description': pool['status_description'],
+        res = {'id': pool.id,
+               'tenant_id': pool.tenant_id,
+               'name': pool.name,
+               'description': pool.description,
+               'subnet_id': pool.subnet_id,
+               'protocol': pool.protocol,
+               'vip_id': pool.vip_id,
+               'lb_method': pool.lb_method,
+               'admin_state_up': pool.admin_state_up,
+               'status': pool.status,
+               'status_description': pool.status_description,
                'provider': ''
                }
 
@@ -88,14 +88,14 @@ class LBObjectModelConverter(object):
 
     def member(self, member):
 
-        res = {'id': member['id'],
-               'tenant_id': member['tenant_id'],
-               'pool_id': member['pool_id'],
-               'address': member['address'],
-               'protocol_port': member['protocol_port'],
-               'weight': member['weight'],
-               'admin_state_up': member['admin_state_up'],
-               'status': member['status'],
-               'status_description': member['status_description']}
+        res = {'id': member.id,
+               'tenant_id': member.tenant_id,
+               'pool_id': member.pool_id,
+               'address': member.address,
+               'protocol_port': member.protocol_port,
+               'weight': member.weight,
+               'admin_state_up': member.admin_state_up,
+               'status': member.status,
+               'status_description': member.status_description}
 
         return res

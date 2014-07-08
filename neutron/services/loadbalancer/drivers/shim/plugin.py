@@ -67,22 +67,19 @@ class Plugin(object):
         return self._plugin._core_plugin()
 
     def _delete_db_vip(self, context, id):
-        # TODO(delete load balancer corresponding to given listener id)
-        pass
+        self._plugin._delete_db_load_balancer(context, id)
 
     def _delete_db_pool(self, context, id):
-        # TODO(delete load balancer corresponding to given pool id)
-        pass
+        self._plugin._delete_db_nodepool(context, id)
 
     def _delete_db_member(self, context, id):
-        # TODO(how do we pass this on to v2 plugin)
-        pass
+        self._plugin.delete_member(context, id)
 
     def _delete_db_pool_health_monitor(self, context, hm_id, pool_id):
         pass
 
     def _delete_db_health_monitor(self, context, id):
-        pass
+        self._plugin._delete_db_healthmonitor(context, id)
 
     def agent_callbacks():
         pass
