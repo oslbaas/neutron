@@ -523,8 +523,8 @@ class LoadBalancerPluginDbv2(loadbalancerv2.LoadBalancerPluginBaseV2,
         with context.session.begin(subtransactions=True):
             listener_db = self._get_resource(context, Listener, id)
 
-            # if listener is already associated with a load balancer and the
-            # loadbalancer_id is specified in the new request, then fail
+            # fail if listener is already associated with a load balancer and
+            # the loadbalancer_id is specified in the new request
             if (listener_db.loadbalancer_id and
                 listener.get('loadbalancer_id') and
                 listener.get('loadbalancer_id') !=
