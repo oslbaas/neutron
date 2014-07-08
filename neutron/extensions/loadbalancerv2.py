@@ -78,8 +78,8 @@ class PoolNotFound(qexception.NotFound):
     message = _("Pool %(pool_id)s could not be found")
 
 
-class MemberNotFound(qexception.NotFound):
-    message = _("Member %(member_id)s could not be found")
+class MemberNotFoundForPool(qexception.NotFound):
+    message = _("Member %(member_id)s could not be found in pool %(pool_id)s")
 
 
 class HealthMonitorNotFound(qexception.NotFound):
