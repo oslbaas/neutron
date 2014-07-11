@@ -30,17 +30,19 @@ class TestShimLoadBalancerDriver(base.BaseTestCase):
     def setUp(self):
         super(TestShimLoadBalancerDriver, self).setUp()
         self.context = context.get_admin_context()
-        self.plugin = mock.Mock()
-        self.driver = shim_driver.LBShimDriver(
-            self.plugin, test_db_loadbalancer.NoopLbaaSDriver)
+        self.mock_plugin = mock.Mock()
+        v1_driver = test_db_loadbalancer.NoopLbaaSDriver(self.mock_plugin)
+        self.driver = shim_driver.LBShimDriver(self.mock_plugin, v1_driver)
 
         self._last_ip_octet = 1
         self._tenant_id = uuidutils.generate_uuid()
 
-        members = [self._mock_member(), self._mock_member()]
-        pool = self._mock_pool(members)
-        listener = self._mock_listener(pool)
-        self.load_balancer = self._mock_load_balancer([listener])
+        self.member = self._mock_member()
+        members = [self.member, self._mock_member()]
+        self.health_monitor = self._mock_health_monitor()
+        self.pool = self._mock_pool(members)
+        self.listener = self._mock_listener(self.pool)
+        self.load_balancer = self._mock_load_balancer([self.listener])
 
     def _mock_member(self):
         member = mock.Mock()
@@ -55,6 +57,9 @@ class TestShimLoadBalancerDriver(base.BaseTestCase):
         member.admin_status_up = True
 
         return member
+
+    def _mock_health_monitor(self):
+        return None
 
     def _mock_pool(self, members):
         pool = mock.Mock()
@@ -109,4 +114,98 @@ class TestShimLoadBalancerDriver(base.BaseTestCase):
         return load_balancer
 
     def test_load_balancer_create(self):
-        self.driver.load_balancer.create(self.context, self.load_balancer)
+        with mock.patch.object(self.driver.wrapped_driver, 'create_vip') as \
+                create:
+            self.driver.load_balancer.create(self.context, self.load_balancer)
+            create.assert_called_once_with(self.context, mock.ANY)
+
+    def test_load_balancer_update(self):
+        with mock.patch.object(self.driver.wrapped_driver, 'update_vip') as \
+                update:
+            self.driver.load_balancer.update(self.context, self.load_balancer,
+                                             self.load_balancer)
+            update.assert_called_once_with(self.context, mock.ANY, mock.ANY)
+
+    def test_load_balancer_delete(self):
+        with mock.patch.object(self.driver.wrapped_driver, 'delete_vip') as \
+                delete:
+            self.driver.load_balancer.delete(self.context, self.load_balancer)
+            delete.assert_called_once_with(self.context, mock.ANY)
+
+    def test_load_balancer_stats(self):
+        with mock.patch.object(self.driver.wrapped_driver, 'stats') as stats:
+            self.driver.load_balancer.stats(self.context, self.load_balancer)
+            stats.assert_called_once_with(self.context, mock.ANY)
+
+    def test_listener_create(self):
+        with mock.patch.object(self.driver.wrapped_driver, 'create_vip') as \
+                create:
+            self.driver.listener.create(self.context, self.listener)
+            create.assert_called_once_with(self.context, mock.ANY)
+
+    def test_listener_update(self):
+        with mock.patch.object(self.driver.wrapped_driver, 'update_vip') as \
+                update:
+            self.driver.listener.update(self.context, self.listener,
+                                             self.listener)
+            update.assert_called_once_with(self.context, mock.ANY, mock.ANY)
+
+    def test_listener_delete(self):
+        with mock.patch.object(self.driver.wrapped_driver, 'delete_vip') as \
+                delete:
+            self.driver.listener.delete(self.context, self.listener)
+            delete.assert_called_once_with(self.context, mock.ANY)
+
+    def test_pool_create(self):
+        with mock.patch.object(self.driver.wrapped_driver, 'create_pool') as \
+                create:
+            self.driver.pool.create(self.context, self.pool)
+            create.assert_called_once_with(self.context, mock.ANY)
+
+    def test_pool_update(self):
+        with mock.patch.object(self.driver.wrapped_driver, 'update_pool') as \
+                update:
+            self.driver.pool.update(self.context, self.pool, self.pool)
+            update.assert_called_once_with(self.context, mock.ANY, mock.ANY)
+
+    def test_pool_delete(self):
+        with mock.patch.object(self.driver.wrapped_driver, 'delete_pool') as \
+                delete:
+            self.driver.pool.delete(self.context, self.pool)
+            delete.assert_called_once_with(self.context, mock.ANY)
+
+    def test_member_create(self):
+        with mock.patch.object(self.driver.wrapped_driver, 'create_member') \
+                as create:
+            self.driver.member.create(self.context, self.member)
+            create.assert_called_once_with(self.context, mock.ANY)
+
+    def test_member_update(self):
+        with mock.patch.object(self.driver.wrapped_driver, 'update_member') \
+                as update:
+            self.driver.member.update(self.context, self.member, self.member)
+            update.assert_called_once_with(self.context, mock.ANY, mock.ANY)
+
+    def test_member_delete(self):
+        with mock.patch.object(self.driver.wrapped_driver, 'delete_member') \
+                as delete:
+            self.driver.member.delete(self.context, self.member)
+            delete.assert_called_once_with(self.context, mock.ANY)
+
+    def test_health_monitor_create(self):
+        with mock.patch.object(self.driver.wrapped_driver,
+                               'create_pool_health_monitor') as create:
+            self.driver.health_monitor.create(self.context, self.health_monitor)
+            # create.assert_called_once_with(self.context, mock.ANY, self.pool.id)
+
+    def test_health_monitor_update(self):
+        with mock.patch.object(self.driver.wrapped_driver,
+                               'update_pool_health_monitor') as update:
+            self.driver.health_monitor.update(self.context, self.health_monitor, self.health_monitor)
+            # update.assert_called_once_with(self.context, mock.ANY, mock.ANY, mock.ANY)
+
+    def test_health_monitor_delete(self):
+        with mock.patch.object(self.driver.wrapped_driver,
+                               'delete_pool_health_monitor') as delete:
+            self.driver.health_monitor.delete(self.context, self.health_monitor)
+            # delete.assert_called_once_with(self.context, mock.ANY, self.pool.id)

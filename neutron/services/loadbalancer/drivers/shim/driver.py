@@ -14,9 +14,9 @@
 #
 # @author: Dustin Lundquist, Blue Box Group
 
+from neutron.openstack.common import log as logging
 from neutron.services.loadbalancer.drivers import driver_base
 from neutron.services.loadbalancer.drivers.shim import converter
-from neutron.openstack.common import log as logging
 from neutron.services.loadbalancer.drivers.shim import plugin
 
 
@@ -49,7 +49,7 @@ class LBShimLoadBalancerManager(driver_base.BaseLoadBalancerManager):
         old_vip = self.driver.converter.lb_to_vip(old_load_balancer)
         vip = self.driver.converter.lb_to_vip(load_balancer)
 
-        self.shim.driver.update_vip(context, old_vip, vip)
+        self.driver.wrapped_driver.update_vip(context, old_vip, vip)
 
     def delete(self, context, load_balancer):
         vip = self.driver.converter.lb_to_vip(load_balancer)
