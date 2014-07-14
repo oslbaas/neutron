@@ -1,0 +1,45 @@
+{% extends "haproxy_base.template" %}
+{% block lbname %}{{ loadbalancer.name }}{% endblock %}
+{% block usergroup %}{{ user_group }}{% endblock %}
+{% block sock %}{{ stats_sock }}{% endblock %}
+{% block main %}
+{% for listener in loadbalancer.listeners %}
+frontend {{ listener.id }}
+    option tcplog
+{% if listener.connection_limit >= 0 %}
+    maxconn {{ listener.connection_limit }}
+{% endif %}
+{% if listener.protocol == 'http' %}
+    option forwardfor
+{% endif %}
+    bind {{ loadbalancer.vip_address }}:{{ listener.protocol_port }}
+    mode {{ listener.protocol }}
+{% if listener.default_pool %}
+    default_backend {{ listener.default_pool.id }}
+
+backend {{ listener.default_pool.id }}
+    mode {{ listener.default_pool.protocol }}
+    balance {{ listener.default_pool.lb_algorithm }}
+{% if listener.default_pool.session_persistence is defined %}
+{% if listener.default_pool.session_persistence.type == constants.SESSION_PERSISTENCE_SOURCE_IP %}
+    stick-table type ip size 10k
+    stick on src
+{% endif %}
+{% if listener.default_pool.session_persistence.type == constants.SESSION_PERSISTENCE_HTTP_COOKIE %}
+    cookie SRV insert indirect nocache
+{% endif %}
+{% if listener.default_pool.session_persistence.type == constants.SESSION_PERSISTENCE_APP_COOKIE and listener.default_pool.session_persistence.cookie_name %}
+    appsession {{ listener.default_pool.session_persistence.cookie_name }} len 56 timeout 3h
+{% endif %}
+{% endif %}
+{% if listener.default_pool.health_monitor %}
+    timeout check {{ listener.default_pool.health_monitor.timeout }}
+    option httpchk {{ listener.default_pool.health_monitor.http_method }} {{ listener.default_pool.health_monitor.url_path }}
+    http-check expect rstatus {{ listener.default_pool.health_monitor.expected_codes }}
+{% endif %}
+{% for member in listener.default_pool.members %}
+    server {{ "%s %s:%d weight %s"|format(member.id, member.address, member.protocol_port, member.weight) }}{% if listener.default_pool.health_monitor %} check inter {{ listener.default_pool.health_monitor.delay }}s fall {{ listener.default_pool.health_monitor.max_retries }}{% endif %}{%if listener.default_pool.session_persistence.type == constants.SESSION_PERSISTENCE_HTTP_COOKIE %} cookie {{ member.id }}{% endif %}
+{% endfor %}
+{% endif %}
+{% endfor %}
+{% endblock %}

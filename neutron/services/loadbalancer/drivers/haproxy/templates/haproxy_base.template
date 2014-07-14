@@ -1,0 +1,20 @@
+# Configuration for {% block lbname %}{% endblock %}
+
+global
+    daemon
+    user nobody
+    group {% block usergroup %}{% endblock %}
+
+    log /dev/log local0
+    log /dev/log local1 notice
+    stats socket {% block sock %}{% endblock %} mode 0666 level user
+
+defaults
+    log global
+    retries 3
+    option redispatch
+    timeout connect 5000
+    timeout client 50000
+    timeout server 50000
+
+{% block main %}{% endblock %}
