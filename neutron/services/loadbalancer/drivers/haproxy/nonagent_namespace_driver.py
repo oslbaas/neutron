@@ -119,6 +119,11 @@ class HaproxyNSDriver(driver_base.LoadBalancerBaseDriver):
         self.vif_driver = vif_driver
 
         # instantiate managers here
+        self.load_balancer = LoadBalancerManager(self)
+        self.listener = ListenerManager(self)
+        self.pool = PoolManager(self)
+        self.member = MemberManager(self)
+        self.health_monitor = HealthMonitorManager(self)
 
         self.deployed_loadbalancer_ids = []
         self._deploy_existing_instances()
@@ -408,3 +413,180 @@ class HaproxyNSDriver(driver_base.LoadBalancerBaseDriver):
             LOG.warn(_('Stats socket not found for load balancer %s'),
                      loadbalancer.id)
             return {}
+
+
+class LoadBalancerManager(driver_base.BaseLoadBalancerManager):
+
+    def _activate_entities(self, context, loadbalancer):
+        self.active(context, loadbalancer.id)
+        for listener in loadbalancer.listeners:
+            self.driver.listener.active(context, listener.id)
+            if listener.default_pool:
+                pool = listener.default_pool
+                self.driver.pool.active(context, pool.id)
+                if pool.healthmonitor:
+                    self.driver.health_monitor.active(context,
+                                                      pool.healthmonitor_id)
+                for member in pool.members:
+                    if member.status != constants.INACTIVE:
+                        self.driver.member.active(context, member.id)
+
+    def refresh(self, context, loadbalancer):
+        super(LoadBalancerManager, self).refresh(context, loadbalancer)
+        if not self.deployable(loadbalancer):
+            #TODO(brandon-logan): Ensure there is a way to sync the change
+            #later.  Periodic task perhaps.
+            return
+
+        if self.driver.exists(loadbalancer):
+            self.driver.update_instance(loadbalancer)
+        else:
+            self.driver.create_instance(context, loadbalancer)
+
+        self._activate_entities(context, loadbalancer)
+
+    def delete(self, context, loadbalancer):
+        super(LoadBalancerManager, self).delete(context, loadbalancer)
+        self.driver.delete_instance(loadbalancer)
+        self.db_delete(context, loadbalancer.id)
+
+    def create(self, context, loadbalancer):
+        super(LoadBalancerManager, self).create(context, loadbalancer)
+        # loadbalancer has no listeners then just set it to ACTIVE
+        if not loadbalancer.listeners:
+            self.active(context, loadbalancer.id)
+            return
+
+        self.refresh(context, loadbalancer)
+
+    def stats(self, context, loadbalancer):
+        super(LoadBalancerManager, self).stats(context, loadbalancer)
+        return self.driver.get_stats(loadbalancer)
+
+    def update(self, context, old_loadbalancer, loadbalancer):
+        super(LoadBalancerManager, self).update(context, old_loadbalancer,
+                                                loadbalancer)
+        self.refresh(context, loadbalancer)
+
+    def deployable(self, loadbalancer):
+        acceptable_statuses = (constants.ACTIVE_PENDING_STATUSES +
+                               (constants.DEFERRED,))
+        #Make sure all listeners and pools attached to this loadbalancer
+        #are in an acceptable status
+        all_listeners_not_acceptable = [
+            listener for listener in
+            loadbalancer.listeners if listener.status not in
+            acceptable_statuses]
+        all_pools_not_acceptable = [
+            listener.default_pool
+            for listener in loadbalancer.listeners
+            if listener.default_pool and listener.default_pool.status not in
+            acceptable_statuses]
+        all_pool_members_not_acceptable = [[
+            member for member in listener.default_pool.members
+            if member.status not in acceptable_statuses]
+            for listener in loadbalancer.listeners
+            if listener.default_pool]
+        return (loadbalancer and loadbalancer.status in acceptable_statuses
+                and not all_listeners_not_acceptable and
+                not all_pools_not_acceptable and
+                len(all_pool_members_not_acceptable) == 1 and
+                not all_pool_members_not_acceptable[0])
+
+
+class ListenerManager(driver_base.BaseListenerManager):
+
+    def _remove_listener(self, loadbalancer, listener_id):
+        index_to_remove = None
+        for index, listener in enumerate(loadbalancer.listeners):
+            if listener.id == listener_id:
+                index_to_remove = index
+        loadbalancer.listeners.pop(index_to_remove)
+
+    def update(self, context, obj_old, obj):
+        super(ListenerManager, self).update(context, obj_old, obj)
+        self.driver.load_balancer.refresh(context, obj.loadbalancer)
+
+    def create(self, context, obj):
+        super(ListenerManager, self).create(context, obj)
+        self.driver.load_balancer.refresh(context, obj.loadbalancer)
+
+    def delete(self, context, obj):
+        super(ListenerManager, self).delete(context, obj)
+        loadbalancer = obj.loadbalancer
+        self._remove_listener(obj.loadbalancer, obj.id)
+        if len(loadbalancer.listeners) > 0:
+            self.driver.load_balancer.refresh(context, loadbalancer)
+        else:
+            # delete instance because haproxy will throw error if port is
+            # missing in frontend
+            self.driver.delete_instance(loadbalancer)
+        self.db_delete(context, obj.id)
+
+
+class PoolManager(driver_base.BasePoolManager):
+
+    def update(self, context, obj_old, obj):
+        super(PoolManager, self).update(context, obj_old, obj)
+        self.driver.load_balancer.refresh(context, obj.listener.loadbalancer)
+
+    def create(self, context, obj):
+        super(PoolManager, self).delete(context, obj)
+        self.driver.load_balancer.refresh(context, obj.listener.loadbalancer)
+
+    def delete(self, context, obj):
+        super(PoolManager, self).delete(context, obj)
+        loadbalancer = obj.listener.loadbalancer
+        obj.listener.default_pool = None
+        obj.listener.default_pool_id = None
+        # just refresh because haproxy is fine if only frontend is listed
+        self.driver.load_balancer.refresh(context, loadbalancer)
+        self.db_delete(context, obj.id)
+
+
+class MemberManager(driver_base.BaseMemberManager):
+
+    def _remove_member(self, pool, member_id):
+        index_to_remove = None
+        for index, member in enumerate(pool.members):
+            if member.id == member_id:
+                index_to_remove = index
+        pool.members.pop(index_to_remove)
+
+    def update(self, context, obj_old, obj):
+        super(MemberManager, self).update(context, obj_old, obj)
+        self.driver.load_balancer.refresh(context,
+                                          obj.pool.listener.loadbalancer)
+
+    def create(self, context, obj):
+        super(MemberManager, self).delete(context, obj)
+        self.driver.load_balancer.refresh(context,
+                                          obj.pool.listener.loadbalancer)
+
+    def delete(self, context, obj):
+        super(MemberManager, self).delete(context, obj)
+        loadbalancer = obj.pool.listener.loadbalancer
+        self._remove_member(obj.pool, obj.id)
+        self.driver.load_balancer.refresh(context, loadbalancer)
+        self.db_delete(context, obj.id)
+
+
+class HealthMonitorManager(driver_base.BaseHealthMonitorManager):
+
+    def update(self, context, obj_old, obj):
+        super(HealthMonitorManager, self).update(context, obj_old, obj)
+        self.driver.load_balancer.refresh(context,
+                                          obj.pool.listener.loadbalancer)
+
+    def create(self, context, obj):
+        super(HealthMonitorManager, self).create(context, obj)
+        self.driver.load_balancer.refresh(context,
+                                          obj.pool.listener.loadbalancer)
+
+    def delete(self, context, obj):
+        super(HealthMonitorManager, self).delete(context, obj)
+        loadbalancer = obj.pool.listener.loadbalancer
+        obj.pool.healthmonitor = None
+        obj.pool.healthmonitor_id = None
+        self.driver.load_balancer.refresh(context, loadbalancer)
+        self.db_delete(context, obj.id)

@@ -548,3 +548,166 @@ class TestHaproxyNSDriver(base.BaseTestCase):
                        timeout='31', max_retries='3', http_method='GET',
                        url_path='/index.html', expected_codes='500, 405, 404',
                        admin_state_up='true')
+
+
+class BaseTestManager(base.BaseTestCase):
+
+    MockLoadBalancer = collections.namedtuple('LoadBalancer',
+                                              'id listeners status')
+    MockListener = collections.namedtuple('Listener', 'id loadbalancer status')
+    MockPool = collections.namedtuple('Pool', 'id listener members status')
+    MockMember = collections.namedtuple('Member', 'id pool status')
+    MockHealthMonitor = collections.namedtuple('HealthMonitor', 'id pool')
+
+    def setUp(self):
+        super(BaseTestManager, self).setUp()
+        self.driver = mock.Mock()
+        self.context = mock.Mock()
+        self.load_balancer = nonagent_namespace_driver.LoadBalancerManager(
+            self.driver)
+        self.listener = nonagent_namespace_driver.ListenerManager(self.driver)
+        self.pool = nonagent_namespace_driver.PoolManager(self.driver)
+        self.member = nonagent_namespace_driver.MemberManager(self.driver)
+        self.health_monitor = nonagent_namespace_driver.HealthMonitorManager(
+            self.driver)
+
+
+class TestLoadBalancerManager(BaseTestManager):
+
+    def _test_activate_entities(self):
+        pass
+
+    def test_refresh(self):
+        pass
+
+    def test_delete(self):
+        pass
+
+    def test_create(self):
+        pass
+
+    def test_stats(self):
+        pass
+
+    def test_update(self):
+        pass
+
+    def test_deployable_all_acceptable(self):
+        member = mock.Mock(status=constants.ACTIVE)
+        pool = mock.Mock(status=constants.ACTIVE, members=[member])
+        listener = mock.Mock(status=constants.DEFERRED, default_pool=pool)
+        loadbalancer = mock.Mock(status=constants.ACTIVE, listeners=[listener])
+
+        self.assertTrue(self.load_balancer.deployable(loadbalancer))
+
+    def test_deployable_lb_not_acceptable(self):
+        member = mock.Mock(status=constants.ACTIVE)
+        pool = mock.Mock(status=constants.ACTIVE, members=[member])
+        listener = mock.Mock(status=constants.ACTIVE, default_pool=pool)
+        loadbalancer = mock.Mock(status=constants.PENDING_DELETE,
+                                 listeners=[listener])
+
+        self.assertFalse(self.load_balancer.deployable(loadbalancer))
+
+    def test_deployable_listener_not_acceptable(self):
+        member = mock.Mock(status=constants.ACTIVE)
+        pool = mock.Mock(status=constants.ACTIVE, members=[member])
+        listener = mock.Mock(status=constants.PENDING_DELETE,
+                             default_pool=pool)
+        loadbalancer = mock.Mock(status=constants.ACTIVE, listeners=[listener])
+
+        self.assertFalse(self.load_balancer.deployable(loadbalancer))
+
+    def test_deployable_pool_not_acceptable(self):
+        member = mock.Mock(status=constants.ACTIVE)
+        pool = mock.Mock(status=constants.PENDING_DELETE, members=[member])
+        listener = mock.Mock(status=constants.ACTIVE, default_pool=pool)
+        loadbalancer = mock.Mock(status=constants.ACTIVE, listeners=[listener])
+
+        self.assertFalse(self.load_balancer.deployable(loadbalancer))
+
+    def test_deployable_member_not_acceptable(self):
+        member = mock.Mock(status=constants.PENDING_DELETE)
+        pool = mock.Mock(status=constants.ACTIVE, members=[member])
+        listener = mock.Mock(status=constants.ACTIVE, default_pool=pool)
+        loadbalancer = mock.Mock(status=constants.ACTIVE, listeners=[listener])
+
+        self.assertFalse(self.load_balancer.deployable(loadbalancer))
+
+
+class TestListenerManager(BaseTestManager):
+
+    def test_remove_listener(self):
+        listeners = [self.MockListener(1, None, None),
+                     self.MockListener(2, None, None)]
+        loadbalancer = self.MockLoadBalancer(1, listeners, None)
+
+        self.listener._remove_listener(loadbalancer, 1)
+        self.assertEqual(1, len(loadbalancer.listeners))
+        self.assertEqual(2, loadbalancer.listeners[0].id)
+
+    def test_create(self):
+        loadbalancer = self.MockLoadBalancer(1, None, None)
+        listener = self.MockListener(1, loadbalancer, None)
+        with mock.patch.object(self.driver.load_balancer,
+                               'refresh') as lb_refresh:
+            self.listener.create(self.context, listener)
+
+            lb_refresh.assert_called_once_with(
+                self.context, loadbalancer)
+
+    def test_update(self):
+        loadbalancer = self.MockLoadBalancer(1, None, None)
+        listener = self.MockListener(1, loadbalancer, None)
+        old_listener = self.MockListener(2, loadbalancer, None)
+        with mock.patch.object(self.driver.load_balancer,
+                               'refresh') as lb_refresh:
+            self.listener.update(self.context, old_listener, listener)
+
+            lb_refresh.assert_called_once_with(
+                self.context, loadbalancer)
+
+    def test_delete_no_listeners_left(self):
+        pass
+
+    def test_delete_with_listeners_left(self):
+        pass
+
+
+class TestPoolManager(BaseTestManager):
+
+    def test_update(self):
+        pass
+
+    def test_create(self):
+        pass
+
+    def test_delete(self):
+        pass
+
+
+class TestMemberManager(BaseTestManager):
+
+    def test_remove_member(self):
+        pass
+
+    def test_update(self):
+        pass
+
+    def test_create(self):
+        pass
+
+    def test_delete(self):
+        pass
+
+
+class TestHealthMonitorManager(BaseTestManager):
+
+    def test_update(self):
+        pass
+
+    def test_create(self):
+        pass
+
+    def test_delete(self):
+        pass
